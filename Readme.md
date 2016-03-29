@@ -8,7 +8,7 @@ XORSHIFT-ADD(XSAdd) Pseudo Random Number Generator
 ## Introduction
 
 
-このIPは XORSHFIT-ADD(XSAdd)法による疑似乱数生成回路です。
+このIPは XORSHFIT-ADD(XSAdd)法による擬似乱数生成回路です。
 
 こちらを参考に書いてみました。[XORSHIFT-ADD (XSadd):   
 A variant of XORSHIFT](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/XSADD/index-jp.html)
@@ -19,7 +19,7 @@ A variant of XORSHIFT](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/XSADD/ind
 ## Features
 
 
-* XORSHFIT-ADD(XSAdd)法による疑似乱数生成回路です。
+* XORSHFIT-ADD(XSAdd)法による擬似乱数生成回路です。
 
 * VHDLで記述しています。
 
