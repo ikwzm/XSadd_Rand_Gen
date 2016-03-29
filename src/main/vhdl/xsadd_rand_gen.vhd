@@ -170,4 +170,10 @@ begin
     RND_NUM_GEN: for i in 0 to L-1 generate
         RND_NUM(32*(i+1)-1 downto 32*i) <= std_logic_vector(random_number(i));
     end generate;
+    -------------------------------------------------------------------------------
+    -- TBL_RDATA     :
+    -------------------------------------------------------------------------------
+    TBL_RDATA_GEN: for i in 0 to 3 generate
+        TBL_RDATA(32*(i+1)-1 downto 32*i) <= std_logic_vector(curr_status(L-1).status(i));
+    end generate;
 end RTL;
