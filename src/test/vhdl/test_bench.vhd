@@ -2,7 +2,7 @@
 --!     @file    test_bench.vhd
 --!     @brief   Test Bench for xsadd_gen
 --!     @version 1.0.0
---!     @date    2016/3/25
+--!     @date    2016/3/29
 --!     @author  Ichiro Kawazome <ichiro_k@ca2.so-net.ne.jp>
 -----------------------------------------------------------------------------------
 --
@@ -49,9 +49,11 @@ architecture MODEL of TEST_BENCH is
     constant  L         : integer := 6;
     signal    CLK       : std_logic;
     signal    RST       : std_logic;
-    signal    INIT      : std_logic;
-    signal    INIT_PARAM: PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-    signal    RND_NUM   : RANDOM_NUMBER_VECTOR(L-1 downto 0);
+    signal    TBL_INIT  : std_logic;
+    signal    TBL_WDATA : std_logic_vector(127 downto 0);
+    signal    TBL_RDATA : std_logic_vector(127 downto 0);
+    signal    RND_NUM   : std_logic_vector(L*32-1 downto 0);
+    signal    RND_RUN   : std_logic;
     signal    RND_VAL   : std_logic;
     signal    RND_RDY   : std_logic;
 begin
@@ -61,12 +63,14 @@ begin
             SEED        => SEED
         )
         port map(
-            CLK         => CLK,
-            RST         => RST,
-            INIT        => INIT,
-            INIT_PARAM  => INIT_PARAM,
-            RND_VAL     => RND_VAL,
-            RND_NUM     => RND_NUM,
+            CLK         => CLK      ,
+            RST         => RST      ,
+            TBL_INIT    => TBL_INIT ,
+            TBL_WDATA   => TBL_WDATA,
+            TBL_RDATA   => TBL_RDATA,
+            RND_RUN     => RND_RUN  ,
+            RND_VAL     => RND_VAL  ,
+            RND_NUM     => RND_NUM  ,
             RND_RDY     => RND_RDY
         );
     
@@ -213,6 +217,7 @@ begin
         ---------------------------------------------------------------------------
         -- 
         ---------------------------------------------------------------------------
+        variable rand_num  : unsigned(31 downto 0);
         variable sample_num: integer;
         constant sample_max: integer := 40;
         ---------------------------------------------------------------------------
@@ -247,28 +252,33 @@ begin
             "b9fbb8d7"  , "63e8f3d9"  , "b34ea936"  , "8fe4ee75"  , 
             "8803c8f1"  , "d74e420e"  , "a5c14d22"  , "20be253f"  );
     begin
-        RST       <= '1';
-        INIT      <= '0';
-        RND_RDY   <= '0';
+        RST        <= '1';
+        TBL_INIT   <= '0';
+        TBL_WDATA  <= (others => '0');
+        RND_RUN    <= '0';
+        RND_RDY    <= '0';
         WAIT_CLK(10);
-        RST       <= '0';
+        RST        <= '0';
         WAIT_CLK(10);
 
+        INIT_PSEUDO_RANDOM_NUMBER_GENERATOR(param,TO_SEED_TYPE(SEED));
      -- WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(param.status(0))),10) & SPACE);
      -- WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(param.status(1))),10) & SPACE);
      -- WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(param.status(2))),10) & SPACE);
      -- WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(param.status(3))),10));
      -- WRITELINE(OUTPUT, text_line);
-
-        INIT_PSEUDO_RANDOM_NUMBER_GENERATOR(param,TO_SEED_TYPE(SEED));
         WRITE(text_line, "xsadd_init(" & TO_DEC_STRING(to_unsigned(SEED,32),4) & ")");
         WRITELINE(OUTPUT, text_line);
         WRITE(text_line, "32-bit unsigned integers r, where 0 <= r < 2^32" & SPACE);
         WRITELINE(OUTPUT, text_line);
-        INIT       <= '1';
-        INIT_PARAM <= param;
+        TBL_INIT   <= '1';
+        TBL_WDATA( 31 downto  0) <= std_logic_vector(param.status(0));
+        TBL_WDATA( 63 downto 32) <= std_logic_vector(param.status(1));
+        TBL_WDATA( 95 downto 64) <= std_logic_vector(param.status(2));
+        TBL_WDATA(127 downto 96) <= std_logic_vector(param.status(3));
         WAIT_CLK(1);
-        INIT       <= '0';
+        TBL_INIT   <= '0';
+        RND_RUN    <= '1';
         RND_RDY    <= '1';
         WAIT_CLK(1);
         sample_num := 0;
@@ -278,11 +288,12 @@ begin
             wait until (CLK'event and CLK = '1');
             if (RND_VAL = '1' and RND_RDY = '1') then
                 for n in 0 to L-1 loop
-                    WRITE(text_line, TO_DEC_STRING(unsigned(TO_01(RND_NUM(n))),10) & SPACE);
+                    rand_num := TO_01(unsigned(RND_NUM(32*(n+1)-1 downto 32*n)));
+                    WRITE(text_line, TO_DEC_STRING(rand_num,10) & SPACE);
                     if (sample_num mod 4 = 3) then
                         WRITELINE(OUTPUT, text_line);
                     end if;
-                    assert (TO_DEC_STRING(unsigned(TO_01(RND_NUM(n))),10) = exp_pat_1(sample_num))
+                    assert (TO_DEC_STRING(rand_num,10) = exp_pat_1(sample_num))
                         report "Mismatch" severity ERROR;
                     sample_num := sample_num + 1;
                     if (sample_num >= sample_max) then
@@ -290,7 +301,7 @@ begin
                     end if;
                 end loop;
                 wait_num  := WAIT_MAX;
-                wait_next := unsigned(TO_01(RND_NUM(0)));
+                wait_next := to_01(unsigned(RND_NUM(31 downto 0)));
                 RND_RDY   <= '0' after DELAY;
             end if;
             if (wait_next >= wait_num or wait_num <= WAIT_MIN) then
@@ -300,19 +311,15 @@ begin
             end if;
         end loop;
         WRITELINE(OUTPUT, text_line);
+        RND_RUN  <= '0' after DELAY;
         RND_RDY  <= '0' after DELAY;
 
         INIT_PSEUDO_RANDOM_NUMBER_GENERATOR(param,init_key);
-
      -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.status(0)),8) & SPACE);
      -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.status(1)),8) & SPACE);
      -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.status(2)),8) & SPACE);
      -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.status(3)),8) & SPACE);
-     -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.mat1     ),8) & SPACE);
-     -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.mat2     ),8) & SPACE);
-     -- WRITE(text_line, "0x" & TO_HEX_STRING(unsigned(param.tmat     ),8) & SPACE);
      -- WRITELINE(OUTPUT, text_line);
-
         WRITE(text_line, "xsadd_init([0x" & TO_HEX_STRING(unsigned(init_key(0)),2) &
                                    ", 0x" & TO_HEX_STRING(unsigned(init_key(1)),2) &
                                    ", 0x" & TO_HEX_STRING(unsigned(init_key(2)),2) &
@@ -320,10 +327,14 @@ begin
         WRITELINE(OUTPUT, text_line);
         WRITE(text_line, "32-bit unsigned integers r, where 0 <= r < 2^32" & SPACE);
         WRITELINE(OUTPUT, text_line);
-        INIT       <= '1';
-        INIT_PARAM <= param;
+        TBL_INIT   <= '1';
+        TBL_WDATA( 31 downto  0) <= std_logic_vector(param.status(0));
+        TBL_WDATA( 63 downto 32) <= std_logic_vector(param.status(1));
+        TBL_WDATA( 95 downto 64) <= std_logic_vector(param.status(2));
+        TBL_WDATA(127 downto 96) <= std_logic_vector(param.status(3));
         WAIT_CLK(1);
-        INIT       <= '0';
+        TBL_INIT   <= '0';
+        RND_RUN    <= '1';
         WAIT_CLK(1);
         RND_RDY    <= '0';
         sample_num := 0;
@@ -333,11 +344,12 @@ begin
             wait until (CLK'event and CLK = '1');
             if (RND_VAL = '1' and RND_RDY = '1') then
                 for n in 0 to L-1 loop
-                    WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(RND_NUM(n))),8) & SPACE);
+                    rand_num := TO_01(unsigned(RND_NUM(32*(n+1)-1 downto 32*n)));
+                    WRITE(text_line, TO_HEX_STRING(rand_num,8) & SPACE);
                     if (sample_num mod 4 = 3) then
                         WRITELINE(OUTPUT, text_line);
                     end if;
-                    assert (TO_HEX_STRING(unsigned(TO_01(RND_NUM(n))),8) = exp_pat_2(sample_num))
+                    assert (TO_HEX_STRING(rand_num,8) = exp_pat_2(sample_num))
                         report "Mismatch" severity ERROR;
                     sample_num := sample_num + 1;
                     if (sample_num >= sample_max) then
@@ -345,7 +357,7 @@ begin
                     end if;
                 end loop;
                 wait_num  := WAIT_MAX;
-                wait_next := unsigned(TO_01(RND_NUM(0)));
+                wait_next := to_01(unsigned(RND_NUM(31 downto 0)));
                 RND_RDY   <= '0' after DELAY;
             end if;
             if (wait_next >= wait_num or wait_num <= WAIT_MIN) then
@@ -355,6 +367,7 @@ begin
             end if;
         end loop;
         WRITELINE(OUTPUT, text_line);
+        RND_RUN  <= '0' after DELAY;
         RND_RDY  <= '0' after DELAY;
 
         assert(false) report TAG & " Run complete..." severity FAILURE;

@@ -2,7 +2,7 @@
 --!     @file    xsadd_rand_gen.vhd
 --!     @brief   Pseudo Random Number Generator (XORSHIFT-ADD).
 --!     @version 1.0.0
---!     @date    2016/3/25
+--!     @date    2016/3/29
 --!     @author  Ichiro Kawazome <ichiro_k@ca2.so-net.ne.jp>
 -----------------------------------------------------------------------------------
 --
@@ -37,8 +37,6 @@
 library ieee;
 use     ieee.std_logic_1164.all;
 library XSADD;
-use     XSADD.XSADD.RANDOM_NUMBER_VECTOR;
-use     XSADD.XSADD.PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
 entity  XSADD_RAND_GEN is
     generic (
         L           :     integer   := 1;
@@ -47,11 +45,13 @@ entity  XSADD_RAND_GEN is
     port (
         CLK         : in  std_logic;
         RST         : in  std_logic;
-        INIT        : in  std_logic;
-        INIT_PARAM  : in  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
+        TBL_INIT    : in  std_logic := '0';
+        TBL_WDATA   : in  std_logic_vector(127 downto 0) := (others => '0');
+        TBL_RDATA   : out std_logic_vector(127 downto 0);
+        RND_RUN     : in  std_logic := '1';
         RND_VAL     : out std_logic;
-        RND_NUM     : out RANDOM_NUMBER_VECTOR(L-1 downto 0);
-        RND_RDY     : in  std_logic
+        RND_NUM     : out std_logic_vector(L*32-1 downto 0);
+        RND_RDY     : in  std_logic := '1'
     );
 end     XSADD_RAND_GEN;
 -----------------------------------------------------------------------------------
@@ -63,7 +63,13 @@ use     ieee.numeric_std.all;
 library XSADD;
 use     XSADD.XSADD.all;
 architecture RTL of XSADD_RAND_GEN is
+    -------------------------------------------------------------------------------
+    --
+    -------------------------------------------------------------------------------
     type      STATUS_VECTOR    is array(integer range <>) of PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
+    -------------------------------------------------------------------------------
+    --
+    -------------------------------------------------------------------------------
     function  INIT_STATUS(PARAM:  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE) return STATUS_VECTOR
     is
         variable  next_status  :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
@@ -76,32 +82,56 @@ architecture RTL of XSADD_RAND_GEN is
         end loop;
         return status;
     end function;
+    -------------------------------------------------------------------------------
+    --
+    -------------------------------------------------------------------------------
+    function  INIT_STATUS(DATA :std_logic_vector) return STATUS_VECTOR is
+        variable param : PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
+    begin
+        for i in 0 to 3 loop
+            param.status(i) := unsigned(DATA(32*(i+1)-1 downto 32*i));
+        end loop;
+        return INIT_STATUS(param);
+    end function;
+    -------------------------------------------------------------------------------
+    --
+    -------------------------------------------------------------------------------
     function  INIT_STATUS(SEED :integer) return STATUS_VECTOR is
     begin
         return INIT_STATUS(NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED)));
     end function;
+    -------------------------------------------------------------------------------
+    --
+    -------------------------------------------------------------------------------
     signal    curr_status      :  STATUS_VECTOR(L-1 downto 0);
     signal    random_number    :  RANDOM_NUMBER_VECTOR(L-1 downto 0);
     signal    random_valid     :  boolean;
     signal    running          :  boolean;
+    signal    status_valid     :  boolean;
+    signal    status_ready     :  boolean;
 begin
+    -------------------------------------------------------------------------------
+    -- running       :
+    -------------------------------------------------------------------------------
+    process(CLK, RST) begin
+        if (RST = '1') then
+            running <= FALSE;
+        elsif (CLK'event and CLK = '1') then
+            running <= TRUE;
+        end if;
+    end process;
+    -------------------------------------------------------------------------------
+    -- curr_status   :
+    -- status_valid  :
+    -------------------------------------------------------------------------------
     process(CLK, RST)
         variable next_status   :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-        variable status_valid  :  boolean;
-        variable status_ready  :  boolean;
     begin
         if (RST = '1') then
-            running       <= FALSE;
-            curr_status   <= INIT_STATUS(SEED);
-            random_valid  <= FALSE;
-            random_number <= (others => (others => '0'));
+            curr_status <= INIT_STATUS(SEED);
         elsif (CLK'event and CLK = '1') then
-            running       <= TRUE;
-            status_valid  := (running = TRUE and INIT = '0');
-            status_ready  := ((random_valid = FALSE) or
-                              (random_valid = TRUE  and RND_RDY = '1'));
-            if (INIT = '1') then
-                curr_status  <= INIT_STATUS(INIT_PARAM);
+            if (TBL_INIT = '1') then
+                curr_status  <= INIT_STATUS(TBL_WDATA);
             elsif (status_valid = TRUE and status_ready = TRUE) then
                 next_status  := curr_status(curr_status'high);
                 for i in curr_status'low to curr_status'high loop
@@ -109,6 +139,19 @@ begin
                     curr_status(i) <= next_status;
                 end loop;
             end if;
+        end if;
+    end process;
+    status_valid <= (running = TRUE and TBL_INIT = '0' and RND_RUN = '1');
+    -------------------------------------------------------------------------------
+    -- random_number :
+    -- random_valid  :
+    -- status_ready  :
+    -------------------------------------------------------------------------------
+    process(CLK, RST) begin
+        if (RST = '1') then
+            random_valid  <= FALSE;
+            random_number <= (others => (others => '0'));
+        elsif (CLK'event and CLK = '1') then
             random_valid  <= status_valid;
             if (status_valid = TRUE and status_ready = TRUE) then
                 for i in curr_status'range loop
@@ -117,6 +160,14 @@ begin
             end if;
         end if;
     end process;
+    status_ready <= ((random_valid = FALSE) or
+                     (random_valid = TRUE  and RND_RDY = '1'));
+    -------------------------------------------------------------------------------
+    -- RND_VAL       :
+    -- RND_NUM       :
+    -------------------------------------------------------------------------------
     RND_VAL <= '1' when (random_valid = TRUE) else '0';
-    RND_NUM <= random_number;
+    RND_NUM_GEN: for i in 0 to L-1 generate
+        RND_NUM(32*(i+1)-1 downto 32*i) <= std_logic_vector(random_number(i));
+    end generate;
 end RTL;
