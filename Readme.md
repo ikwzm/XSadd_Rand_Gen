@@ -10,8 +10,7 @@ XORSHIFT-ADD(XSAdd) Pseudo Random Number Generator
 
 このIPは XORSHFIT-ADD(XSAdd)法による擬似乱数生成回路です。
 
-こちらを参考に書いてみました。[XORSHIFT-ADD (XSadd):   
-A variant of XORSHIFT](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/XSADD/index-jp.html)
+こちらを参考に書いてみました。[XORSHIFT-ADD (XSadd):A variant of XORSHIFT](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/XSADD/index-jp.html)
 
 
 
@@ -124,7 +123,7 @@ Table.2 Port  Descriptions
     <td align="center">STD_LOGIC</td>
     <td align="center">1</td>
     <td align="center">out</td>
-    <td>乱数有効信号<br />RND_NUMより生成された乱数が有効であることを示す信号</td>
+    <td>乱数有効信号<br />RND_NUMから出力された乱数が有効であることを示す信号</td>
   </tr>
   <tr>
     <td>RND_RDY</td>
@@ -330,7 +329,7 @@ Table.3 Resouces and Performance(Xilinx)
 
 
 
-```VHDL:xsadd_rand_gen.vhd
+```VHDL
 library ieee;
 use     ieee.std_logic_1164.all;
 library XSADD;
@@ -353,8 +352,6 @@ entity  XSADD_RAND_GEN is
 end     XSADD_RAND_GEN;
  
 ```
-
-
 
 
 
