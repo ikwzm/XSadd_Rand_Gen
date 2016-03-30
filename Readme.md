@@ -325,6 +325,17 @@ Table.3 Resouces and Performance(Xilinx)
 # Architecture
 
 
+## Block Diagram
+
+
+
+![Fig.4 Block Diagram](./readme.img/akgeo4.jpg "Fig.4 Block Diagram")
+
+Fig.4 Block Diagram
+
+<br />
+
+
 ## Source Code Description
 
 
