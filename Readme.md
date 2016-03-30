@@ -322,13 +322,13 @@ Table.3 Resouces and Performance(Xilinx)
 
 
 
-# Source Code
+# Architecture
 
 
-ここではXSADD_RAND_GENのソースコードの中身を簡単に説明します。
+## Source Code Description
 
-## xsadd_rand_gen.vhd
 
+ここではXSADD_RAND_GENのソースコード[(src/main/vhdl/xsadd_rand_gen.vhd)](src/main/vhdl/xsadd_rand_gen.vhd) を簡単に説明します。
 
 ### エンティティ
 
@@ -424,7 +424,7 @@ begin
 
 
 
-### 初期化信号の生成
+### 初期化直後に状態を遷移させるための信号
 
 
 
@@ -484,7 +484,7 @@ TBL_INIT信号のアサート時にはTBL_WDATAの値をレジスタにセット
 
 initial_next信号のアサート時(リセット信号のネゲート直後またはTBL_INIT信号のネゲート直後)、または後段の乱数生成器が次の乱数を生成するタイミングで、乱数ジェネレーターの状態を次の状態に更新します。
 
-乱数ジェネレータが乱数を生成出来るようになった時、status_valid信号をアサートします。なお、リセット信号のネゲート直後またはTBL_INIT信号のネゲート直後の乱数ジェネレータ更新時は、乱数を生成出来ないのでstatus_valid信号はアサートされません。
+乱数ジェネレータが乱数を生成出来るようになった時、status_valid信号をアサートします。なお、リセット時またはTBL_INIT信号のアサート時のレジスタ初期化時、および、リセット信号のネゲート直後またはTBL_INIT信号のネゲート直後の乱数ジェネレータ更新時は、乱数を生成出来ないのでstatus_valid信号はアサートされません。
 
 
 ### 乱数生成器
@@ -517,7 +517,7 @@ random_valid信号は生成した乱数が有効であることを示します�
 
 status_valid信号がアサートされた時、乱数を生成してrandom_numberレジスタにセットします。ただし、乱数を出力している状態(random_valid信号がアサートされている状態)でRND_RDY信号がネゲートされている場合は、random_numberレジスタは前の乱数の値を保持したまま、次の乱数は生成しません。
 
-次の乱数を生成するタイミングと同時に乱数ジェネレータの状態を次の状態に更新します。status_ready信号はそのタイミングを示します。
+次の乱数を生成するタイミングと同時に前段の乱数ジェネレータの状態を次の状態に更新します。status_ready信号はそのタイミングを示します。
 
 
 
@@ -539,7 +539,7 @@ end RTL;
 ```
 
 
-ここでは内部信号(random_valid信号、random_numberレジスタ、乱数ジェネレーターの現在の状態)を外部ポートに出力します。
+ここでは生成した内部信号(random_valid信号、random_numberレジスタ)および乱数ジェネレーターの現在の状態を外部ポートに出力します。
 
 
 
