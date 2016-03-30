@@ -332,7 +332,6 @@ Table.3 Resouces and Performance(Xilinx)
 ```VHDL
 library ieee;
 use     ieee.std_logic_1164.all;
-library XSADD;
 entity  XSADD_RAND_GEN is
     generic (
         L           :     integer   := 1;
