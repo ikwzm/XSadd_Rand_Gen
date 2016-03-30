@@ -69,21 +69,12 @@ architecture RTL of XSADD_RAND_GEN is
     -------------------------------------------------------------------------------
     --
     -------------------------------------------------------------------------------
-    function  RESET_STATUSES(SEED :integer) return STATUS_VECTOR is
-        variable  next_status  :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-        variable  statuses     :  STATUS_VECTOR(L-1 downto 0);
-    begin
-        next_status := NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED));
-        for i in statuses'low to statuses'high loop
-            NEXT_PSEUDO_RANDOM_NUMBER_GENERATOR(next_status);
-            statuses(i) := next_status;
-        end loop;
-        return statuses;
-    end function;
+    constant  RESET_STATUSES   :  STATUS_VECTOR(L-1 downto 0)
+                               := (others => NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED)));
+    signal    curr_statuses    :  STATUS_VECTOR(L-1 downto 0);
     -------------------------------------------------------------------------------
     --
     -------------------------------------------------------------------------------
-    signal    curr_statuses    :  STATUS_VECTOR(L-1 downto 0);
     signal    random_number    :  RANDOM_NUMBER_VECTOR(L-1 downto 0);
     signal    random_valid     :  boolean;
     signal    initial_next     :  boolean;
@@ -108,7 +99,7 @@ begin
         variable next_status   :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
     begin
         if (RST = '1') then
-            curr_statuses <= RESET_STATUSES(SEED);
+            curr_statuses <= RESET_STATUSES;
         elsif (CLK'event and CLK = '1') then
             if (TBL_INIT = '1') then
                 for i in 0 to 3 loop

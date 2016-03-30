@@ -260,6 +260,45 @@ begin
         WAIT_CLK(10);
         RST        <= '0';
         WAIT_CLK(10);
+        RND_RUN    <= '1';
+        RND_RDY    <= '1';
+        WRITE(text_line, "xsadd_init(" & TO_DEC_STRING(to_unsigned(SEED,32),4) & ")");
+        WRITELINE(OUTPUT, text_line);
+        WRITE(text_line, "32-bit unsigned integers r, where 0 <= r < 2^32" & SPACE);
+        WRITELINE(OUTPUT, text_line);
+        WAIT_CLK(1);
+        sample_num := 0;
+        wait_next  := WAIT_MAX;
+        wait_num   := WAIT_MAX;
+        LOOP1: loop
+            wait until (CLK'event and CLK = '1');
+            if (RND_VAL = '1' and RND_RDY = '1') then
+                for n in 0 to L-1 loop
+                    rand_num := TO_01(unsigned(RND_NUM(32*(n+1)-1 downto 32*n)));
+                    WRITE(text_line, TO_DEC_STRING(rand_num,10) & SPACE);
+                    if (sample_num mod 4 = 3) then
+                        WRITELINE(OUTPUT, text_line);
+                    end if;
+                    assert (TO_DEC_STRING(rand_num,10) = exp_pat_1(sample_num))
+                        report "Mismatch" severity ERROR;
+                    sample_num := sample_num + 1;
+                    if (sample_num >= sample_max) then
+                        exit LOOP1;
+                    end if;
+                end loop;
+                wait_num  := WAIT_MAX;
+                wait_next := to_01(unsigned(RND_NUM(31 downto 0)));
+                RND_RDY   <= '0' after DELAY;
+            end if;
+            if (wait_next >= wait_num or wait_num <= WAIT_MIN) then
+                RND_RDY   <= '1' after DELAY;
+            else
+                wait_num  := wait_num / 2;
+            end if;
+        end loop;
+        WRITELINE(OUTPUT, text_line);
+        RND_RUN  <= '0' after DELAY;
+        RND_RDY  <= '0' after DELAY;
 
         INIT_PSEUDO_RANDOM_NUMBER_GENERATOR(param,TO_SEED_TYPE(SEED));
      -- WRITE(text_line, TO_HEX_STRING(unsigned(TO_01(param.status(0))),10) & SPACE);
@@ -284,7 +323,7 @@ begin
         sample_num := 0;
         wait_next  := WAIT_MAX;
         wait_num   := WAIT_MAX;
-        LOOP1: loop
+        LOOP2: loop
             wait until (CLK'event and CLK = '1');
             if (RND_VAL = '1' and RND_RDY = '1') then
                 for n in 0 to L-1 loop
@@ -297,7 +336,7 @@ begin
                         report "Mismatch" severity ERROR;
                     sample_num := sample_num + 1;
                     if (sample_num >= sample_max) then
-                        exit LOOP1;
+                        exit LOOP2;
                     end if;
                 end loop;
                 wait_num  := WAIT_MAX;
@@ -340,7 +379,7 @@ begin
         sample_num := 0;
         wait_next  := WAIT_MAX+1;
         wait_num   := WAIT_MAX;
-        LOOP2: loop
+        LOOP3: loop
             wait until (CLK'event and CLK = '1');
             if (RND_VAL = '1' and RND_RDY = '1') then
                 for n in 0 to L-1 loop
@@ -353,7 +392,7 @@ begin
                         report "Mismatch" severity ERROR;
                     sample_num := sample_num + 1;
                     if (sample_num >= sample_max) then
-                        exit LOOP2;
+                        exit LOOP3;
                     end if;
                 end loop;
                 wait_num  := WAIT_MAX;
