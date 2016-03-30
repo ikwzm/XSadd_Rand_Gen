@@ -325,7 +325,12 @@ Table.3 Resouces and Performance(Xilinx)
 # Source Code
 
 
-## src/main/vhdl/xsadd_rand_gen.vhd
+ここではXSADD_RAND_GENのソースコードの中身を簡単に説明します。
+
+## xsadd_rand_gen.vhd
+
+
+### エンティティ
 
 
 
@@ -353,6 +358,14 @@ end     XSADD_RAND_GEN;
 ```
 
 
+XSADD_RAND_GEN モジュールの外部とのインターフェース(Parameter と Port)を宣言しています。Parameter と Port の詳細は前節のSpecification を参照してください。
+
+
+
+
+### 使用するライブラリの宣言
+
+
 
 ```VHDL
 library ieee;
@@ -365,26 +378,40 @@ architecture RTL of XSADD_RAND_GEN is
 ```
 
 
+アーキテクチャ宣言の前に使用するライブラリを宣言しています。
+
+XSADDパッケージは XORSHIFT-ADD(XSadd)擬似乱数生成用のVHDLのパッケージです。このパッケージに擬似乱数ジェネレーターの各種タイプや関数が定義されています。詳細は [src/main/vhdl/xsadd.vhd](src/main/vhdl/xsadd.vhd) を参照してください。
+
+
+
+
+### 乱数ジェネレーターの状態を保持するレジスタの宣言と初期値の定義
+
+
 
 ```VHDL
     type      STATUS_VECTOR    is array(integer range <>) of PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-    function  RESET_STATUSES(SEED :integer) return STATUS_VECTOR is
-        variable  next_status  :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-        variable  statuses     :  STATUS_VECTOR(L-1 downto 0);
-    begin
-        next_status := NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED));
-        for i in statuses'low to statuses'high loop
-            NEXT_PSEUDO_RANDOM_NUMBER_GENERATOR(next_status);
-            statuses(i) := next_status;
-        end loop;
-        return statuses;
-    end function;
+    constant  RESET_STATUSES   :  STATUS_VECTOR(L-1 downto 0)
+                               := (others => NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED)));
+    signal    curr_statuses    :  STATUS_VECTOR(L-1 downto 0);
+
 ```
+
+
+XSADD_RAND_GEN では一度に複数の乱数を生成することが出来ます。したがって保持する乱数の状態もその分だけ用意するために配列にしています。
+
+リセット時には SEED parameter で指定されたシード値で内部状態を初期化します。そのための初期値をここで定義しています。
+
+
+
+
+
+
+### 内部信号の宣言
 
 
 
 ```VHDL
-    signal    curr_statuses    :  STATUS_VECTOR(L-1 downto 0);
     signal    random_number    :  RANDOM_NUMBER_VECTOR(L-1 downto 0);
     signal    random_valid     :  boolean;
     signal    initial_next     :  boolean;
@@ -392,6 +419,12 @@ architecture RTL of XSADD_RAND_GEN is
     signal    status_ready     :  boolean;
 begin
 ```
+
+
+
+
+
+### 初期化信号の生成
 
 
 
@@ -407,13 +440,21 @@ begin
 ```
 
 
+XORSHIFT-ADD(XSadd)では、内部状態を遷移してから乱数を生成します。そのためXSADD_RAND_GEN では、リセット解除直後またはTBL_INIT信号ネゲート直後に、一回だけ状態を遷移させるためのinitial_next信号を用意しています。
+
+
+
+
+### 乱数ジェネレーターの状態遷移
+
+
 
 ```VHDL
     process(CLK, RST)
         variable next_status   :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
     begin
         if (RST = '1') then
-            curr_statuses <= RESET_STATUSES(SEED);
+            curr_statuses <= RESET_STATUSES;
         elsif (CLK'event and CLK = '1') then
             if (TBL_INIT = '1') then
                 for i in 0 to 3 loop
@@ -433,6 +474,20 @@ begin
     status_valid <= (initial_next = FALSE and TBL_INIT = '0' and RND_RUN = '1');
 
 ```
+
+
+ここでは乱数ジェネレーターの現在の状態を保持するレジスタの初期化と更新を行います。
+
+同期リセット(RST)信号のアサート時には SEED で指定された初期値をレジスタにセットします。
+
+TBL_INIT信号のアサート時にはTBL_WDATAの値をレジスタにセットします。
+
+initial_next信号のアサート時(リセット信号のネゲート直後またはTBL_INIT信号のネゲート直後)、または後段の乱数生成器が次の乱数を生成するタイミングで、乱数ジェネレーターの状態を次の状態に更新します。
+
+乱数ジェネレータが乱数を生成出来るようになった時、status_valid信号をアサートします。なお、リセット信号のネゲート直後またはTBL_INIT信号のネゲート直後の乱数ジェネレータ更新時は、乱数を生成出来ないのでstatus_valid信号はアサートされません。
+
+
+### 乱数生成器
 
 
 
@@ -456,6 +511,20 @@ begin
 ```
 
 
+ここでは乱数ジェネレーターの現在の状態から乱数を生成します。
+
+random_valid信号は生成した乱数が有効であることを示します。具体的には、status_valid信号がアサートされた時つまり乱数ジェネレータが乱数を生成出来るようになった時、random_valid信号をアサートします。
+
+status_valid信号がアサートされた時、乱数を生成してrandom_numberレジスタにセットします。ただし、乱数を出力している状態(random_valid信号がアサートされている状態)でRND_RDY信号がネゲートされている場合は、random_numberレジスタは前の乱数の値を保持したまま、次の乱数は生成しません。
+
+次の乱数を生成するタイミングと同時に乱数ジェネレータの状態を次の状態に更新します。status_ready信号はそのタイミングを示します。
+
+
+
+
+### 出力信号の生成
+
+
 
 ```VHDL
     RND_VAL <= '1' when (random_valid = TRUE) else '0';
@@ -468,6 +537,11 @@ begin
 end RTL;
 
 ```
+
+
+ここでは内部信号(random_valid信号、random_numberレジスタ、乱数ジェネレーターの現在の状態)を外部ポートに出力します。
+
+
 
 
 
