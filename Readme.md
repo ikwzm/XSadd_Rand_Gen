@@ -138,7 +138,7 @@ Table.2 Port  Descriptions
     <td align="center">STD_LOGIC</td>
     <td align="center">1</td>
     <td align="center">in</td>
-    <td>状態テーブル・初期化信号<br />状態テーブルを初期化することを示します状態テーブルを明示的に初期化しない場合はこの信号を&#39;0&#39;にしてください。</td>
+    <td>状態テーブル・初期化信号<br />状態テーブルを初期化することを示します状態テーブルを明示的に初期化しない場合はこの信号を&#39;0&#39;にしてください。TBL_INITを&#39;0&#39;にしてから乱数が生成されるまで2クロックの遅れが生じます。</td>
   </tr>
   <tr>
     <td>TBL_WDATA</td>
@@ -157,6 +157,8 @@ Table.2 Port  Descriptions
 </table>
 
 
+## Timing Diagram
+
 
 
 ![Fig.2 Generate Timing (L=1)](./readme.img/akgeo2.jpg "Fig.2 Generate Timing (L=1)")
@@ -171,8 +173,6 @@ Fig.2 Generate Timing (L=1)
 Fig.3 Generate Timing (L=4)
 
 <br />
-
-
 
 
 ## Resouces and Performance
@@ -372,40 +372,26 @@ architecture RTL of XSADD_RAND_GEN is
 
 ```VHDL
     type      STATUS_VECTOR    is array(integer range <>) of PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-    function  INIT_STATUS(PARAM:  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE) return STATUS_VECTOR
-    is
+    function  RESET_STATUSES(SEED :integer) return STATUS_VECTOR is
         variable  next_status  :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-        variable  status       :  STATUS_VECTOR(L-1 downto 0);
+        variable  statuses     :  STATUS_VECTOR(L-1 downto 0);
     begin
-        next_status := PARAM;
-        for i in status'low to status'high loop
+        next_status := NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED));
+        for i in statuses'low to statuses'high loop
             NEXT_PSEUDO_RANDOM_NUMBER_GENERATOR(next_status);
-            status(i) := next_status;
+            statuses(i) := next_status;
         end loop;
-        return status;
+        return statuses;
     end function;
-    function  INIT_STATUS(DATA :std_logic_vector) return STATUS_VECTOR is
-        variable param : PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
-    begin
-        for i in 0 to 3 loop
-            param.status(i) := unsigned(DATA(32*(i+1)-1 downto 32*i));
-        end loop;
-        return INIT_STATUS(param);
-    end function;
-    function  INIT_STATUS(SEED :integer) return STATUS_VECTOR is
-    begin
-        return INIT_STATUS(NEW_PSEUDO_RANDOM_NUMBER_GENERATOR(TO_SEED_TYPE(SEED)));
-    end function;
-
 ```
 
 
 
 ```VHDL
-    signal    curr_status      :  STATUS_VECTOR(L-1 downto 0);
+    signal    curr_statuses    :  STATUS_VECTOR(L-1 downto 0);
     signal    random_number    :  RANDOM_NUMBER_VECTOR(L-1 downto 0);
     signal    random_valid     :  boolean;
-    signal    running          :  boolean;
+    signal    initial_next     :  boolean;
     signal    status_valid     :  boolean;
     signal    status_ready     :  boolean;
 begin
@@ -413,14 +399,12 @@ begin
 
 
 
-
-
 ```VHDL
     process(CLK, RST) begin
         if (RST = '1') then
-            running <= FALSE;
+            initial_next <= TRUE;
         elsif (CLK'event and CLK = '1') then
-            running <= TRUE;
+            initial_next <= (TBL_INIT = '1');
         end if;
     end process;
 
@@ -433,24 +417,26 @@ begin
         variable next_status   :  PSEUDO_RANDOM_NUMBER_GENERATOR_TYPE;
     begin
         if (RST = '1') then
-            curr_status <= INIT_STATUS(SEED);
+            curr_statuses <= RESET_STATUSES(SEED);
         elsif (CLK'event and CLK = '1') then
             if (TBL_INIT = '1') then
-                curr_status  <= INIT_STATUS(TBL_WDATA);
-            elsif (status_valid = TRUE and status_ready = TRUE) then
-                next_status  := curr_status(curr_status'high);
-                for i in curr_status'low to curr_status'high loop
+                for i in 0 to 3 loop
+                    next_status.status(i) := unsigned(TBL_WDATA(32*(i+1)-1 downto 32*i));
+                end loop;
+                curr_statuses(curr_statuses'high) <= next_status;
+            elsif (initial_next = TRUE) or
+                  (status_valid = TRUE and status_ready = TRUE) then
+                next_status := curr_statuses(curr_statuses'high);
+                for i in curr_statuses'low to curr_statuses'high loop
                     NEXT_PSEUDO_RANDOM_NUMBER_GENERATOR(next_status);
-                    curr_status(i) <= next_status;
+                    curr_statuses(i) <= next_status;
                 end loop;
             end if;
         end if;
     end process;
-    status_valid <= (running = TRUE and TBL_INIT = '0' and RND_RUN = '1');
+    status_valid <= (initial_next = FALSE and TBL_INIT = '0' and RND_RUN = '1');
 
 ```
-
-
 
 
 
@@ -462,8 +448,8 @@ begin
         elsif (CLK'event and CLK = '1') then
             random_valid  <= status_valid;
             if (status_valid = TRUE and status_ready = TRUE) then
-                for i in curr_status'range loop
-                    random_number(i) <= GENERATE_TEMPER(curr_status(i));
+                for i in curr_statuses'range loop
+                    random_number(i) <= GENERATE_TEMPER(curr_statuses(i));
                 end loop;
             end if;
         end if;
@@ -475,15 +461,13 @@ begin
 
 
 
-
-
 ```VHDL
     RND_VAL <= '1' when (random_valid = TRUE) else '0';
     RND_NUM_GEN: for i in 0 to L-1 generate
         RND_NUM(32*(i+1)-1 downto 32*i) <= std_logic_vector(random_number(i));
     end generate;
     TBL_RDATA_GEN: for i in 0 to 3 generate
-        TBL_RDATA(32*(i+1)-1 downto 32*i) <= std_logic_vector(curr_status(L-1).status(i));
+        TBL_RDATA(32*(i+1)-1 downto 32*i) <= std_logic_vector(curr_statuses(L-1).status(i));
     end generate;
 end RTL;
 
